@@ -85,9 +85,9 @@ export function TokenPrice() {
           </div>
         </div>
         <div>
-          <div className="text-sm text-gray-400">Rate</div>
+          <div className="text-sm text-gray-400">1 BNB =</div>
           <div className="text-lg font-medium text-white">
-            {Number(tokensPerBnb).toLocaleString()} SRA/BNB
+            {Number(tokensPerBnb).toLocaleString()} SRA
           </div>
         </div>
       </div>
