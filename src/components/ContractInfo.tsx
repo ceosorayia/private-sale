@@ -13,6 +13,7 @@ export function ContractInfo({ contract }: ContractInfoProps) {
   const [remainingTokens, setRemainingTokens] = useState<string>('0');
   const [isLoading, setIsLoading] = useState(false);
   const [saleActive, setSaleActive] = useState(false);
+  const [rate, setRate] = useState<string>('0');
 
   const fetchContractData = async () => {
     if (!contract) {
@@ -24,15 +25,18 @@ export function ContractInfo({ contract }: ContractInfoProps) {
     console.log('Fetching contract data...');
 
     try {
-      const [remaining, active] = await Promise.all([
+      const [remaining, active, currentRate] = await Promise.all([
         contract.remainingSRATokens(),
-        contract.saleActive()
+        contract.saleActive(),
+        contract.tokenPerBNB()
       ]);
       console.log('Remaining tokens raw:', remaining.toString());
       const formattedRemaining = ethers.utils.formatEther(remaining);
+      const formattedRate = ethers.utils.formatEther(currentRate);
       console.log('Formatted remaining tokens:', formattedRemaining);
       setRemainingTokens(formattedRemaining);
       setSaleActive(active);
+      setRate(formattedRate);
     } catch (error) {
       console.error('Error fetching contract data:', error);
       toast.error('Error fetching contract data');
@@ -74,6 +78,13 @@ export function ContractInfo({ contract }: ContractInfoProps) {
           <span className={`font-medium ${saleActive ? 'text-green-400' : 'text-red-400'}`}>
             {saleActive ? 'Active' : 'Inactive'}
           </span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-gray-300">Rate</span>
+          <div>
+            <div className="text-sm text-gray-400">1 BNB =</div>
+            <div className="text-lg font-medium text-white">{Number(rate).toLocaleString()} SRA</div>
+          </div>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-gray-300">Contract</span>
