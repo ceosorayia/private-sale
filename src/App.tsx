@@ -22,7 +22,7 @@ function App() {
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h1 className="text-2xl font-bold">SRA Token</h1>
-                <p className="text-sm text-gray-400">Presale</p>
+                <p className="text-sm text-gray-400">Private sale</p>
               </div>
               {connected ? (
                 <div className="flex items-center text-sm bg-gray-700/50 backdrop-blur rounded-full px-4 py-2">
