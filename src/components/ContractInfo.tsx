@@ -2,12 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { CONTRACT_ADDRESS } from '../contracts/config';
 
 interface ContractInfoProps {
   contract: ethers.Contract | null;
 }
-
-const CONTRACT_ADDRESS = '0xaA5B9f8Cea06543c194A93f209049901Ee569d57';
 
 export function ContractInfo({ contract }: ContractInfoProps) {
   const [remainingTokens, setRemainingTokens] = useState<string>('0');
@@ -21,21 +20,33 @@ export function ContractInfo({ contract }: ContractInfoProps) {
     }
     
     setIsLoading(true);
-    console.log('Fetching contract data...');
+    console.log('Fetching contract data...', {
+      contractAddress: contract.address,
+      providerNetwork: await contract.provider.getNetwork()
+    });
 
     try {
-      const [remaining, active] = await Promise.all([
-        contract.remainingSRATokens(),
-        contract.saleActive()
-      ]);
+      // Fetch remaining tokens
+      const remaining = await contract.remainingSRATokens();
       console.log('Remaining tokens raw:', remaining.toString());
+      
+      // Fetch sale status
+      const active = await contract.saleActive();
+      console.log('Sale active status:', active);
+      
       const formattedRemaining = ethers.utils.formatEther(remaining);
       console.log('Formatted remaining tokens:', formattedRemaining);
+      
       setRemainingTokens(formattedRemaining);
       setSaleActive(active);
-    } catch (error) {
-      console.error('Error fetching contract data:', error);
-      toast.error('Error fetching contract data');
+    } catch (error: any) {
+      console.error('Error fetching contract data:', {
+        error,
+        errorMessage: error.message,
+        code: error.code,
+        reason: error.reason
+      });
+      toast.error(`Error fetching contract data: ${error.message}`);
       setRemainingTokens('--');
       setSaleActive(false);
     } finally {

@@ -4,12 +4,15 @@ import { formatBNB } from '../utils/formatters';
 import { RefreshCw } from 'lucide-react';
 import { ethers } from 'ethers';
 import toast from 'react-hot-toast';
+import { MIN_BNB_CONTRIBUTION, MAX_BNB_CONTRIBUTION } from '../contracts/config';
+import { setTokensPerBNB } from '../utils/tokenPrice';
 
 export function TokenPrice() {
   const { contract } = useContract();
-  const [maxBnb, setMaxBnb] = useState<string>('5');
-  const [minBnb, setMinBnb] = useState<string>('0.1');
-  const [tokensPerBnb, setTokensPerBnb] = useState<string>('3500');
+  const [maxBnb, setMaxBnb] = useState<string>(MAX_BNB_CONTRIBUTION.toString());
+  const [minBnb, setMinBnb] = useState<string>(MIN_BNB_CONTRIBUTION.toString());
+  const [tokensPerBnb, setTokensPerBnb] = useState<string>('--');
+  const [tokensPerBNB, setTokensPerBNB] = useState<string>('--'); 
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchLimits = async () => {
@@ -19,32 +22,35 @@ export function TokenPrice() {
     }
 
     setIsLoading(true);
-    console.log('TokenPrice: Fetching limits...');
+    console.log('TokenPrice: Fetching limits...', {
+      contractAddress: contract.address,
+      providerNetwork: await contract.provider.getNetwork()
+    });
 
     try {
-      const [maxBnbWei, minBnbWei, tokensPerBnbWei] = await Promise.all([
-        contract.maxBnbPerUser(),
-        contract.minBnbPerUser(),
-        contract.tokensPerBNB()
-      ]);
-
-      const formattedMaxBnb = ethers.utils.formatEther(maxBnbWei);
-      const formattedMinBnb = ethers.utils.formatEther(minBnbWei);
+      // Fetch tokensPerBNB
+      console.log('TokenPrice: Fetching tokensPerBNB...');
+      const tokensPerBnbWei = await contract.tokensPerBNB();
+      console.log('TokenPrice: tokensPerBnbWei:', tokensPerBnbWei.toString());
+      
       const formattedTokensPerBnb = ethers.utils.formatEther(tokensPerBnbWei);
-
-      console.log('TokenPrice: Fetched values', {
-        maxBnb: formattedMaxBnb,
-        minBnb: formattedMinBnb,
+      console.log('TokenPrice: Formatted values:', {
         tokensPerBnb: formattedTokensPerBnb
       });
 
-      setMaxBnb(formattedMaxBnb);
-      setMinBnb(formattedMinBnb);
       setTokensPerBnb(formattedTokensPerBnb);
+      setTokensPerBNB(formattedTokensPerBnb); 
 
-    } catch (error) {
-      console.error('TokenPrice: Error fetching limits:', error);
-      toast.error('Error fetching token price information');
+    } catch (error: any) {
+      console.error('TokenPrice: Error fetching limits:', {
+        error,
+        message: error.message,
+        code: error.code,
+        reason: error.reason
+      });
+      toast.error(`Error fetching token price information: ${error.message}`);
+      setTokensPerBnb('--');
+      setTokensPerBNB('--'); 
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +93,7 @@ export function TokenPrice() {
         <div>
           <div className="text-sm text-gray-400">1 BNB =</div>
           <div className="text-lg font-medium text-white">
-            {Number(tokensPerBnb).toLocaleString()} SRA
+            {tokensPerBnb === '--' ? '--' : Number(tokensPerBnb).toLocaleString()} SRA
           </div>
         </div>
       </div>

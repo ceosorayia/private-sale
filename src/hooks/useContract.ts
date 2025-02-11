@@ -17,6 +17,10 @@ export function useContract() {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       setProvider(provider);
       
+      // Initialiser le contrat en lecture seule avec le provider
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+      setContract(contract);
+      
       // Gestionnaires d'événements pour les changements de réseau et de compte
       const handleChainChanged = () => {
         window.location.reload();
@@ -115,7 +119,21 @@ export function useContract() {
       setAddress(address);
       setConnected(true);
 
-      // Initialiser le contrat après la connexion
+      // Vérifier que le contrat existe à l'adresse spécifiée
+      try {
+        const code = await provider.getCode(CONTRACT_ADDRESS);
+        if (code === '0x') {
+          console.error('No contract found at address:', CONTRACT_ADDRESS);
+          toast.error('Contract not found at specified address');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking contract:', error);
+        toast.error('Failed to verify contract');
+        return;
+      }
+
+      // Initialiser le contrat avec le signer pour les transactions
       const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
       setContract(contract);
     } catch (error: any) {

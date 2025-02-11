@@ -4,7 +4,6 @@ import { AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { parseAmount, formatBNB } from '../utils/formatters';
 import { getErrorMessage } from '../utils/errors';
-import { calculateTokenAmount } from '../utils/tokenPrice';
 import { VestingInfo } from './VestingInfo';
 
 interface BuyFormProps {
@@ -19,6 +18,8 @@ export function BuyForm({ contract, balance, account }: BuyFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isEmergencyMode, setIsEmergencyMode] = useState(false);
   const [estimatedGas, setEstimatedGas] = useState<string>('');
+  const [estimatedTokens, setEstimatedTokens] = useState<string>('0');
+  const [tokensPerBNB, setTokensPerBNB] = useState<string>('0');
 
   useEffect(() => {
     const checkContractStatus = async () => {
@@ -38,7 +39,41 @@ export function BuyForm({ contract, balance, account }: BuyFormProps) {
     checkContractStatus();
   }, [contract]);
 
-  const validateTransaction = (): boolean => {
+  useEffect(() => {
+    const fetchTokensPerBNB = async () => {
+      if (!contract) return;
+      try {
+        console.log('BuyForm: Fetching tokensPerBNB...');
+        const tokensPerBnbWei = await contract.tokensPerBNB();
+        const formatted = ethers.utils.formatEther(tokensPerBnbWei);
+        console.log('BuyForm: tokensPerBNB:', formatted);
+        setTokensPerBNB(formatted);
+        // Recalculer l'estimation si un montant est déjà saisi
+        if (bnbAmount) {
+          updateEstimatedTokens(bnbAmount, formatted);
+        }
+      } catch (error) {
+        console.error('Error fetching tokensPerBNB:', error);
+        setTokensPerBNB('0');
+      }
+    };
+
+    fetchTokensPerBNB();
+    // Mettre à jour toutes les 30 secondes
+    const interval = setInterval(fetchTokensPerBNB, 30000);
+    return () => clearInterval(interval);
+  }, [contract]);
+
+  const updateEstimatedTokens = (amount: string, tokenRate: string) => {
+    if (!amount || isNaN(Number(amount)) || !tokenRate || isNaN(Number(tokenRate))) {
+      setEstimatedTokens('0');
+      return;
+    }
+    const tokens = Number(amount) * Number(tokenRate);
+    setEstimatedTokens(tokens.toLocaleString());
+  };
+
+  const validateTransaction = async (): Promise<boolean> => {
     if (isEmergencyMode) {
       toast.error('The contract is currently in emergency mode. Transactions are temporarily suspended.');
       return false;
@@ -49,17 +84,47 @@ export function BuyForm({ contract, balance, account }: BuyFormProps) {
       return false;
     }
 
-    const amount = Number(bnbAmount);
-    if (amount < 0.1) {
-      toast.error('Minimum contribution is 0.1 BNB');
-      return false;
-    }
-    if (amount > 5) {
-      toast.error('Maximum contribution is 5 BNB');
-      return false;
-    }
+    try {
+      // Récupérer les limites du contrat
+      const [minBnbWei, maxBnbWei] = await Promise.all([
+        contract.minBnbPerUser(),
+        contract.maxBnbPerUser()
+      ]);
 
-    return true;
+      const minBnb = Number(ethers.utils.formatEther(minBnbWei));
+      const maxBnb = Number(ethers.utils.formatEther(maxBnbWei));
+      const amount = Number(bnbAmount);
+
+      if (amount < minBnb) {
+        toast.error(`Minimum contribution is ${minBnb} BNB`);
+        return false;
+      }
+      if (amount > maxBnb) {
+        toast.error(`Maximum contribution is ${maxBnb} BNB`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error validating transaction:', error);
+      // Utiliser les valeurs par défaut si l'appel au contrat échoue
+      const amount = Number(bnbAmount);
+      if (amount < 0.1) {
+        toast.error('Minimum contribution is 0.1 BNB');
+        return false;
+      }
+      if (amount > 5) {
+        toast.error('Maximum contribution is 5 BNB');
+        return false;
+      }
+      return true;
+    }
+  };
+
+  const handleBnbAmountChange = (value: string) => {
+    setBnbAmount(value);
+    updateEstimatedTokens(value, tokensPerBNB);
+    estimateGasFees(value);
   };
 
   const estimateGasFees = async (amount: string) => {
@@ -112,45 +177,32 @@ export function BuyForm({ contract, balance, account }: BuyFormProps) {
     }
   };
 
-  useEffect(() => {
-    estimateGasFees(bnbAmount);
-  }, [bnbAmount, contract]);
-
   const buyTokens = async () => {
     if (!contract || !bnbAmount) return;
-    
-    if (!validateTransaction()) {
-      return;
-    }
 
     try {
       setIsLoading(true);
-      
-      const provider = contract.provider;
-      const feeData = await provider.getFeeData();
-      
-      if (!feeData.maxFeePerGas || !feeData.maxPriorityFeePerGas) {
-        throw new Error('Unable to get network fee data');
-      }
+      if (!(await validateTransaction())) return;
+
+      const amountInWei = parseAmount(bnbAmount);
+      console.log('Buying tokens...', {
+        amount: bnbAmount,
+        amountInWei: amountInWei.toString()
+      });
 
       const tx = await contract.buyTokens({
-        value: parseAmount(bnbAmount),
-        maxFeePerGas: feeData.maxFeePerGas,
-        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
-      });
-      
-      toast.promise(tx.wait(), {
-        loading: 'Transaction in progress...',
-        success: 'Tokens bought successfully!',
-        error: (err) => getErrorMessage(err)
+        value: amountInWei
       });
 
-      const receipt = await tx.wait();
-      if (receipt.status === 1) {
-        setBnbAmount('');
-        // Forcer une mise à jour des données
-        estimateGasFees('');
-      }
+      toast.promise(tx.wait(), {
+        loading: 'Transaction in progress...',
+        success: 'Transaction successful!',
+        error: 'Transaction failed'
+      });
+
+      await tx.wait();
+      setBnbAmount('');
+      setEstimatedTokens('0');
     } catch (error: any) {
       console.error('Error buying tokens:', error);
       toast.error(getErrorMessage(error));
@@ -178,19 +230,24 @@ export function BuyForm({ contract, balance, account }: BuyFormProps) {
             </span>
           )}
         </div>
-        <input
-          type="number"
-          value={bnbAmount}
-          onChange={(e) => setBnbAmount(e.target.value)}
-          placeholder="0.0"
-          disabled={!saleActive || isLoading}
-          className="w-full bg-gray-700/50 backdrop-blur rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-        />
-        {Number(bnbAmount) > 0 && (
-          <div className="text-sm text-gray-300">
-            ≈ {calculateTokenAmount(bnbAmount)} SRA
+        <div className="mt-1 relative">
+          <input
+            type="number"
+            step="0.1"
+            min="0.1"
+            max="5"
+            value={bnbAmount}
+            onChange={(e) => handleBnbAmountChange(e.target.value)}
+            className="w-full bg-gray-800/50 text-white border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter amount..."
+          />
+          <div className="text-sm text-gray-300 mt-1">
+            ≈ {estimatedTokens} SRA
+            {tokensPerBNB === '0' && (
+              <span className="text-yellow-500 ml-2">(Loading rate...)</span>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       <button
