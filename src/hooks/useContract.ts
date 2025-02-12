@@ -70,6 +70,87 @@ export function useContract() {
     checkNetwork();
   }, [provider]);
 
+  useEffect(() => {
+    const checkExistingConnection = async () => {
+      if (typeof window.ethereum !== 'undefined') {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        
+        try {
+          // Vérifier si des comptes sont déjà connectés
+          const accounts = await provider.listAccounts();
+          if (accounts.length > 0) {
+            const signer = provider.getSigner();
+            const address = await signer.getAddress();
+            const network = await provider.getNetwork();
+            
+            if (network.chainId !== 56) { // BSC Mainnet
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: '0x38' }], // BSC Mainnet
+                });
+              } catch (switchError: any) {
+                // Si le réseau n'est pas configuré, on propose de l'ajouter
+                if (switchError.code === 4902) {
+                  try {
+                    await window.ethereum.request({
+                      method: 'wallet_addEthereumChain',
+                      params: [{
+                        chainId: '0x38',
+                        chainName: 'Binance Smart Chain',
+                        nativeCurrency: {
+                          name: 'BNB',
+                          symbol: 'BNB',
+                          decimals: 18
+                        },
+                        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                        blockExplorerUrls: ['https://bscscan.com/']
+                      }]
+                    });
+                  } catch (addError) {
+                    console.error('Error adding BSC network:', addError);
+                    toast.error('Failed to add BSC network to MetaMask');
+                    return;
+                  }
+                } else {
+                  console.error('Error switching network:', switchError);
+                  toast.error('Failed to switch to BSC network');
+                  return;
+                }
+              }
+            }
+            
+            // Vérifier que le contrat existe à l'adresse spécifiée
+            try {
+              const code = await provider.getCode(CONTRACT_ADDRESS);
+              if (code === '0x') {
+                console.error('No contract found at address:', CONTRACT_ADDRESS);
+                toast.error('Contract not found at specified address');
+                return;
+              }
+            } catch (error) {
+              console.error('Error checking contract:', error);
+              toast.error('Failed to verify contract');
+              return;
+            }
+
+            // Initialiser le contrat avec le signer pour les transactions
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            
+            setSigner(signer);
+            setAddress(address);
+            setConnected(true);
+            setContract(contract);
+          }
+        } catch (error) {
+          console.error('Error checking existing connection:', error);
+        }
+      }
+    };
+
+    checkExistingConnection();
+  }, []);
+
   const connect = async () => {
     try {
       setIsConnecting(true);
