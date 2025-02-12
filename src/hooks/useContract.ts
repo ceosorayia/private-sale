@@ -173,23 +173,25 @@ export function useContract() {
       setIsConnecting(true);
       
       const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      const isMetaMaskBrowser = window.ethereum && window.ethereum.isMetaMask;
+      const isMetaMaskBrowser = window.ethereum?.isMetaMask;
 
       if (isMobile) {
-        if (isMetaMaskBrowser) {
-          // Si on est déjà dans l'app MetaMask, on se connecte directement
-          await connectWithMetaMask();
-        } else {
-          // Si MetaMask est installé, on ouvre l'app
-          if (window.ethereum && window.ethereum.isMetaMask) {
-            window.location.href = metamaskAppUrl;
-          } else {
-            // Sinon on redirige vers le store approprié
-            window.location.href = /Android/i.test(navigator.userAgent) 
-              ? metamaskPlayStoreUrl 
-              : metamaskAppStoreUrl;
+        // Sur mobile, on essaie d'abord d'ouvrir directement MetaMask avec le deep link
+        window.location.href = metamaskAppUrl;
+        
+        // Si après un court délai nous sommes toujours sur la même page,
+        // cela signifie que MetaMask n'est pas installé
+        setTimeout(() => {
+          if (document.hidden || document.visibilityState === 'hidden') {
+            // L'app MetaMask s'est ouverte
+            return;
           }
-        }
+          // MetaMask n'est pas installé, redirection vers le store
+          window.location.href = /Android/i.test(navigator.userAgent) 
+            ? metamaskPlayStoreUrl 
+            : metamaskAppStoreUrl;
+        }, 1000);
+        
       } else {
         // Sur navigateur desktop
         if (!window.ethereum) {
