@@ -26,7 +26,7 @@ function App() {
               </div>
               {connected ? (
                 <div className="flex items-center text-sm bg-gray-700/50 backdrop-blur rounded-full px-4 py-2">
-                  <Wallet className="w-4 h-4 mr-2" />
+                  <img src="/metamask.svg" alt="MetaMask" className="w-4 h-4 mr-2" />
                   {formatAddress(address)}
                 </div>
               ) : (
@@ -34,8 +34,8 @@ function App() {
                   onClick={connect}
                   className="flex items-center bg-blue-600 hover:bg-blue-700 rounded-full px-4 py-2 text-sm transition-colors"
                 >
-                  <Wallet className="w-4 h-4 mr-2" />
-                  Connecter
+                  <img src="/metamask.svg" alt="MetaMask" className="w-5 h-5 mr-2" />
+                  Connect
                 </button>
               )}
             </div>
