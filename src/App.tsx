@@ -15,8 +15,8 @@ function App() {
   const isWrongNetwork = chainId !== null && chainId !== 56;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-black text-white">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 to-black text-white flex items-center justify-center">
+      <div className="container mx-auto px-4">
         <div className="max-w-md mx-auto">
           <div className="bg-gray-800/50 backdrop-blur-xl rounded-xl shadow-lg p-6 border border-gray-700">
             <div className="flex justify-between items-center mb-6">
