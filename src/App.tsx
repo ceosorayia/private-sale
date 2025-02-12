@@ -8,6 +8,7 @@ import { TokenPrice } from './components/TokenPrice';
 import { formatAddress } from './utils/formatters';
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const metamaskExtensionUrl = 'https://metamask.io/download/';
 
 function App() {
   const { contract, connected, address, chainId, connect, provider } = useContract();
@@ -66,6 +67,28 @@ function App() {
                 </p>
                 <p>
                   2. Open this page in MetaMask's browser
+                </p>
+              </div>
+            )}
+
+            {!connected && !isMobile && (
+              <div className="mt-4 text-sm text-gray-400">
+                <p className="mb-2">
+                  1. Install the MetaMask extension{' '}
+                  <a 
+                    href={metamaskExtensionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 underline"
+                  >
+                    here
+                  </a>
+                </p>
+                <p className="mb-2">
+                  2. Create or import a wallet
+                </p>
+                <p>
+                  3. Click the Connect button above
                 </p>
               </div>
             )}

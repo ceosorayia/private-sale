@@ -8,6 +8,7 @@ const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const metamaskAppUrl = `https://metamask.app.link/dapp/${window.location.host}`;
 const metamaskPlayStoreUrl = 'https://play.google.com/store/apps/details?id=io.metamask';
 const metamaskAppStoreUrl = 'https://apps.apple.com/us/app/metamask/id1438144202';
+const metamaskExtensionUrl = 'https://metamask.io/download.html';
 
 export function useContract() {
   const [contract, setContract] = useState<ethers.Contract | null>(null);
@@ -195,6 +196,10 @@ export function useContract() {
       }
 
       if (!detectedProvider) {
+        if (!isMobile) {
+          // Sur desktop, ouvrir la page de téléchargement de MetaMask
+          window.open(metamaskExtensionUrl, '_blank');
+        }
         toast.error('Please install MetaMask to use this application');
         return;
       }
