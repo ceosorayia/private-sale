@@ -172,42 +172,57 @@ export function useContract() {
     try {
       setIsConnecting(true);
 
-      // Si on est sur mobile, on redirige vers MetaMask
-      if (isMobile) {
-        // Vérifie si MetaMask est installé via le user agent
-        const isMetaMaskInstalled = /MetaMask/i.test(navigator.userAgent);
-        
-        if (isMetaMaskInstalled) {
-          // Rediriger vers l'app MetaMask
-          window.location.href = metamaskAppUrl;
-        } else {
-          // Rediriger vers le store approprié
-          const isAndroid = /Android/i.test(navigator.userAgent);
-          window.location.href = isAndroid ? metamaskPlayStoreUrl : metamaskAppStoreUrl;
-        }
-        return;
-      }
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-      let detectedProvider;
-      if (typeof window.ethereum !== 'undefined') {
-        detectedProvider = window.ethereum;
-      } else if (typeof window['web3'] !== 'undefined') {
-        detectedProvider = window['web3'].currentProvider;
-      }
+// Vérifie si le site est ouvert dans MetaMask
+const isMetaMaskBrowser = window.ethereum && window.ethereum.isMetaMask;
 
-      if (!detectedProvider) {
-        if (!isMobile) {
-          // Sur desktop, ouvrir la page de téléchargement de MetaMask
-          window.open(metamaskExtensionUrl, '_blank');
-        }
-        toast.error('Please install MetaMask to use this application');
-        return;
-      }
+if (isMobile) {
+  if (isMetaMaskBrowser) {
+    console.log("Le site est ouvert dans le navigateur MetaMask.");
+    connectWithMetaMask();
+  } else {
+    // Vérifie si MetaMask est installé
+    if (window.ethereum && window.ethereum.isMetaMask) {
+      window.location.href = "https://metamask.app.link/";
+    } else {
+      // Redirection vers les stores
+      const metamaskPlayStoreUrl = "https://play.google.com/store/apps/details?id=io.metamask";
+      const metamaskAppStoreUrl = "https://apps.apple.com/us/app/metamask/id1438144202";
+      window.location.href = /Android/i.test(navigator.userAgent) ? metamaskPlayStoreUrl : metamaskAppStoreUrl;
+    }
+  }
+} else {
+  let detectedProvider = window.ethereum || (window.web3 && window.web3.currentProvider);
 
-      if (!provider) {
-        const newProvider = new ethers.providers.Web3Provider(detectedProvider);
-        setProvider(newProvider);
-      }
+  if (!detectedProvider) {
+    console.log("Aucun provider Web3 détecté.");
+    alert("Veuillez installer MetaMask pour vous connecter.");
+  } else {
+    console.log("Provider détecté :", detectedProvider);
+    connectWithMetaMask();
+  }
+}
+
+// Fonction pour connecter MetaMask
+async function connectWithMetaMask() {
+  try {
+    if (!window.ethereum) throw new Error("MetaMask non détecté.");
+    
+    // Demande à l'utilisateur de se connecter
+    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+    
+    console.log("Connecté avec l'adresse :", accounts[0]);
+    alert("Connexion réussie !");
+    
+    // Stocker l'adresse dans localStorage ou gérer l'authentification
+    localStorage.setItem("walletAddress", accounts[0]);
+
+  } catch (error) {
+    console.error("Erreur de connexion :", error);
+    alert("Échec de la connexion à MetaMask.");
+  }
+}
 
       // Force MetaMask to show the connection popup
       await (provider || new ethers.providers.Web3Provider(detectedProvider)).send("eth_requestAccounts", []);
