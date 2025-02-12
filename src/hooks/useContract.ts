@@ -171,131 +171,109 @@ export function useContract() {
   const connect = async () => {
     try {
       setIsConnecting(true);
-
-const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-// Vérifie si le site est ouvert dans MetaMask
-const isMetaMaskBrowser = window.ethereum && window.ethereum.isMetaMask;
-
-if (isMobile) {
-  if (isMetaMaskBrowser) {
-    console.log("Le site est ouvert dans le navigateur MetaMask.");
-    connectWithMetaMask();
-  } else {
-    // Vérifie si MetaMask est installé
-    if (window.ethereum && window.ethereum.isMetaMask) {
-      window.location.href = "https://metamask.app.link/";
-    } else {
-      // Redirection vers les stores
-      const metamaskPlayStoreUrl = "https://play.google.com/store/apps/details?id=io.metamask";
-      const metamaskAppStoreUrl = "https://apps.apple.com/us/app/metamask/id1438144202";
-      window.location.href = /Android/i.test(navigator.userAgent) ? metamaskPlayStoreUrl : metamaskAppStoreUrl;
-    }
-  }
-} else {
-  let detectedProvider = window.ethereum || (window.web3 && window.web3.currentProvider);
-
-  if (!detectedProvider) {
-    console.log("Aucun provider Web3 détecté.");
-    alert("Veuillez installer MetaMask pour vous connecter.");
-  } else {
-    console.log("Provider détecté :", detectedProvider);
-    connectWithMetaMask();
-  }
-}
-
-// Fonction pour connecter MetaMask
-async function connectWithMetaMask() {
-  try {
-    if (!window.ethereum) throw new Error("MetaMask non détecté.");
-    
-    // Demande à l'utilisateur de se connecter
-    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-    
-    console.log("Connecté avec l'adresse :", accounts[0]);
-    alert("Connexion réussie !");
-    
-    // Stocker l'adresse dans localStorage ou gérer l'authentification
-    localStorage.setItem("walletAddress", accounts[0]);
-
-  } catch (error) {
-    console.error("Erreur de connexion :", error);
-    alert("Échec de la connexion à MetaMask.");
-  }
-}
-
-      // Force MetaMask to show the connection popup
-      await (provider || new ethers.providers.Web3Provider(detectedProvider)).send("eth_requestAccounts", []);
       
-      const signer = (provider || new ethers.providers.Web3Provider(detectedProvider)).getSigner();
-      const address = await signer.getAddress();
-      const network = await (provider || new ethers.providers.Web3Provider(detectedProvider)).getNetwork();
-      
-      if (network.chainId !== 56) { // BSC Mainnet
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isMetaMaskBrowser = window.ethereum && window.ethereum.isMetaMask;
+
+      if (isMobile) {
+        if (isMetaMaskBrowser) {
+          // Si on est déjà dans l'app MetaMask, on se connecte directement
+          await connectWithMetaMask();
+        } else {
+          // Si MetaMask est installé, on ouvre l'app
+          if (window.ethereum && window.ethereum.isMetaMask) {
+            window.location.href = metamaskAppUrl;
+          } else {
+            // Sinon on redirige vers le store approprié
+            window.location.href = /Android/i.test(navigator.userAgent) 
+              ? metamaskPlayStoreUrl 
+              : metamaskAppStoreUrl;
+          }
+        }
+      } else {
+        // Sur navigateur desktop
+        if (!window.ethereum) {
+          // Si MetaMask n'est pas installé, on redirige vers la page de téléchargement
+          window.location.href = metamaskExtensionUrl;
+          return;
+        }
+        
+        // Si MetaMask est installé, on procède à la connexion
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        
         try {
           await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x38' }], // BSC Mainnet
+            method: 'eth_requestAccounts'
           });
-        } catch (switchError: any) {
-          // Si le réseau n'est pas configuré, on propose de l'ajouter
-          if (switchError.code === 4902) {
+          
+          const signer = provider.getSigner();
+          const address = await signer.getAddress();
+          const network = await provider.getNetwork();
+          
+          if (network.chainId !== 56) {
             try {
               await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: '0x38',
-                  chainName: 'Binance Smart Chain',
-                  nativeCurrency: {
-                    name: 'BNB',
-                    symbol: 'BNB',
-                    decimals: 18
-                  },
-                  rpcUrls: ['https://bsc-dataseed.binance.org/'],
-                  blockExplorerUrls: ['https://bscscan.com/']
-                }]
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x38' }]
               });
-            } catch (addError) {
-              console.error('Error adding BSC network:', addError);
-              toast.error('Failed to add BSC network to MetaMask');
-              return;
+            } catch (switchError: any) {
+              if (switchError.code === 4902) {
+                try {
+                  await window.ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [{
+                      chainId: '0x38',
+                      chainName: 'Binance Smart Chain',
+                      nativeCurrency: {
+                        name: 'BNB',
+                        symbol: 'BNB',
+                        decimals: 18
+                      },
+                      rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                      blockExplorerUrls: ['https://bscscan.com/']
+                    }]
+                  });
+                } catch (addError) {
+                  console.error('Error adding BSC network:', addError);
+                  toast.error('Failed to add BSC network to MetaMask');
+                  return;
+                }
+              } else {
+                console.error('Error switching network:', switchError);
+                toast.error('Failed to switch to BSC network');
+                return;
+              }
             }
-          } else {
-            console.error('Error switching network:', switchError);
-            toast.error('Failed to switch to BSC network');
+          }
+
+          // Vérifier que le contrat existe
+          const code = await provider.getCode(CONTRACT_ADDRESS);
+          if (code === '0x') {
+            console.error('No contract found at address:', CONTRACT_ADDRESS);
+            toast.error('Contract not found at specified address');
             return;
+          }
+
+          // Initialiser le contrat avec le signer
+          const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+          
+          setSigner(signer);
+          setAddress(address);
+          setConnected(true);
+          setContract(contract);
+          
+        } catch (error: any) {
+          console.error('Failed to connect wallet:', error);
+          if (error.code === 4001) {
+            toast.error('Please accept the connection request in MetaMask');
+          } else {
+            toast.error('Failed to connect wallet');
           }
         }
       }
-      
-      setSigner(signer);
-      setAddress(address);
-      setConnected(true);
-
-      // Vérifier que le contrat existe à l'adresse spécifiée
-      try {
-        const code = await provider.getCode(CONTRACT_ADDRESS);
-        if (code === '0x') {
-          console.error('No contract found at address:', CONTRACT_ADDRESS);
-          toast.error('Contract not found at specified address');
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking contract:', error);
-        toast.error('Failed to verify contract');
-        return;
-      }
-
-      // Initialiser le contrat avec le signer pour les transactions
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      setContract(contract);
-    } catch (error: any) {
-      console.error('Failed to connect wallet:', error);
-      if (error.code === 4001) {
-        toast.error('Please accept the connection request in MetaMask');
-      } else {
-        toast.error('Failed to connect wallet');
-      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      toast.error('Failed to connect');
     } finally {
       setIsConnecting(false);
     }
