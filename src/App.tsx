@@ -8,6 +8,7 @@ import { TokenPrice } from './components/TokenPrice';
 import { formatAddress } from './utils/formatters';
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isMetaMaskBrowser = window.ethereum?.isMetaMask;
 const metamaskExtensionUrl = 'https://metamask.io/download/';
 
 function App() {
@@ -37,7 +38,7 @@ function App() {
                   className="flex items-center bg-blue-600 hover:bg-blue-700 rounded-full px-4 py-2 text-sm transition-colors"
                 >
                   <img src="/metamask.svg" alt="MetaMask" className="w-5 h-5 mr-2" />
-                  {isMobile ? 'Open MetaMask' : 'Connect'}
+                  {isMobile ? (isMetaMaskBrowser ? 'Connect' : 'Open MetaMask') : 'Connect'}
                 </button>
               )}
             </div>
