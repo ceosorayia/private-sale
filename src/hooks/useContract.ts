@@ -1,7 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../contracts/config';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from 'react';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../contracts/config';
+import WalletConnectProvider from '@walletconnect/web3-provider';
+
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 export function useContract() {
   const [contract, setContract] = useState<ethers.Contract | null>(null);
@@ -11,150 +13,109 @@ export function useContract() {
   const [address, setAddress] = useState<string>('');
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [wcProvider, setWcProvider] = useState<WalletConnectProvider | null>(null);
 
-  useEffect(() => {
-    if (typeof window.ethereum !== 'undefined') {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      setProvider(provider);
-      
-      // Initialiser le contrat en lecture seule avec le provider
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-      setContract(contract);
-      
-      // Gestionnaires d'événements pour les changements de réseau et de compte
-      const handleChainChanged = () => {
-        window.location.reload();
-      };
+  const initWalletConnect = async () => {
+    const wcProvider = new WalletConnectProvider({
+      rpc: {
+        56: 'https://bsc-dataseed.binance.org'
+      },
+      chainId: 56
+    });
 
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // L'utilisateur s'est déconnecté
-          setConnected(false);
-          setAddress('');
-          setSigner(null);
-          setContract(null);
-        } else if (accounts[0] !== address) {
-          // Nouveau compte sélectionné
-          window.location.reload();
-        }
-      };
-
-      window.ethereum.on('chainChanged', handleChainChanged);
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-
-      // Nettoyage des écouteurs d'événements
-      return () => {
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-      };
-    }
-  }, [address]);
-
-  useEffect(() => {
-    const checkNetwork = async () => {
-      if (provider) {
-        try {
-          const network = await provider.getNetwork();
-          setChainId(network.chainId);
-        } catch (error) {
-          console.error('Error checking network:', error);
-          setChainId(null);
-        }
+    setWcProvider(wcProvider);
+    
+    // Subscribe to accounts change
+    wcProvider.on('accountsChanged', (accounts: string[]) => {
+      if (accounts.length > 0) {
+        setAddress(accounts[0]);
+      } else {
+        setAddress('');
+        setConnected(false);
       }
-    };
-    checkNetwork();
-  }, [provider]);
+    });
 
-  const connect = useCallback(async () => {
-    if (!provider) {
-      toast.error('Please install MetaMask to use this application');
-      return;
-    }
+    // Subscribe to chainId change
+    wcProvider.on('chainChanged', (chainId: number) => {
+      setChainId(chainId);
+    });
 
+    // Subscribe to session disconnection
+    wcProvider.on('disconnect', () => {
+      setAddress('');
+      setConnected(false);
+    });
+
+    return wcProvider;
+  };
+
+  const connect = async () => {
     try {
       setIsConnecting(true);
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
-      const network = await provider.getNetwork();
-      
-      if (network.chainId !== 56) { // BSC Mainnet
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x38' }], // BSC Mainnet
-          });
-        } catch (switchError: any) {
-          // Si le réseau n'est pas configuré, on propose de l'ajouter
-          if (switchError.code === 4902) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: '0x38',
-                  chainName: 'Binance Smart Chain',
-                  nativeCurrency: {
-                    name: 'BNB',
-                    symbol: 'BNB',
-                    decimals: 18
-                  },
-                  rpcUrls: ['https://bsc-dataseed.binance.org/'],
-                  blockExplorerUrls: ['https://bscscan.com/']
-                }]
-              });
-            } catch (addError) {
-              console.error('Error adding BSC network:', addError);
-              toast.error('Failed to add BSC network to MetaMask');
-              return;
-            }
-          } else {
-            console.error('Error switching network:', switchError);
-            toast.error('Failed to switch to BSC network');
-            return;
-          }
-        }
-      }
-      
-      setSigner(signer);
-      setAddress(address);
-      setConnected(true);
 
-      // Vérifier que le contrat existe à l'adresse spécifiée
-      try {
-        const code = await provider.getCode(CONTRACT_ADDRESS);
-        if (code === '0x') {
-          console.error('No contract found at address:', CONTRACT_ADDRESS);
-          toast.error('Contract not found at specified address');
-          return;
-        }
-      } catch (error) {
-        console.error('Error checking contract:', error);
-        toast.error('Failed to verify contract');
-        return;
-      }
-
-      // Initialiser le contrat avec le signer pour les transactions
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-      setContract(contract);
-    } catch (error: any) {
-      console.error('Failed to connect wallet:', error);
-      if (error.code === 4001) {
-        toast.error('Please accept the connection request in MetaMask');
+      if (isMobile) {
+        // Utiliser WalletConnect sur mobile
+        const wcProviderInstance = wcProvider || await initWalletConnect();
+        await wcProviderInstance.enable();
+        
+        const web3Provider = new ethers.providers.Web3Provider(wcProviderInstance);
+        const signer = web3Provider.getSigner();
+        const address = await signer.getAddress();
+        const chainId = await web3Provider.getNetwork().then(network => network.chainId);
+        
+        setProvider(web3Provider);
+        setSigner(signer);
+        setAddress(address);
+        setChainId(chainId);
+        setConnected(true);
+        
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        setContract(contract);
       } else {
-        toast.error('Failed to connect wallet');
+        // Utiliser MetaMask sur desktop
+        if (typeof window.ethereum === 'undefined') {
+          throw new Error('Please install MetaMask');
+        }
+
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send('eth_requestAccounts', []);
+        
+        const signer = provider.getSigner();
+        const address = await signer.getAddress();
+        const chainId = await provider.getNetwork().then(network => network.chainId);
+        
+        setProvider(provider);
+        setSigner(signer);
+        setAddress(address);
+        setChainId(chainId);
+        setConnected(true);
+        
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        setContract(contract);
       }
+    } catch (error) {
+      console.error('Connection error:', error);
+      throw error;
     } finally {
       setIsConnecting(false);
     }
-  }, [provider]);
+  };
 
-  return { 
-    contract, 
-    connected, 
-    address, 
-    chainId, 
+  useEffect(() => {
+    return () => {
+      if (wcProvider) {
+        wcProvider.disconnect();
+      }
+    };
+  }, [wcProvider]);
+
+  return {
+    contract,
+    connected,
+    address,
+    chainId,
     connect,
-    isConnecting,
-    provider 
+    provider,
+    isConnecting
   };
 }
