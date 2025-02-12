@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 
 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const metamaskAppUrl = `https://metamask.app.link/dapp/${window.location.host}`;
+const metamaskPlayStoreUrl = 'https://play.google.com/store/apps/details?id=io.metamask';
+const metamaskAppStoreUrl = 'https://apps.apple.com/us/app/metamask/id1438144202';
 
 export function useContract() {
   const [contract, setContract] = useState<ethers.Contract | null>(null);
@@ -168,6 +170,22 @@ export function useContract() {
   const connect = async () => {
     try {
       setIsConnecting(true);
+
+      // Si on est sur mobile, on redirige vers MetaMask
+      if (isMobile) {
+        // Vérifie si MetaMask est installé via le user agent
+        const isMetaMaskInstalled = /MetaMask/i.test(navigator.userAgent);
+        
+        if (isMetaMaskInstalled) {
+          // Rediriger vers l'app MetaMask
+          window.location.href = metamaskAppUrl;
+        } else {
+          // Rediriger vers le store approprié
+          const isAndroid = /Android/i.test(navigator.userAgent);
+          window.location.href = isAndroid ? metamaskPlayStoreUrl : metamaskAppStoreUrl;
+        }
+        return;
+      }
 
       let detectedProvider;
       if (typeof window.ethereum !== 'undefined') {
