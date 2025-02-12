@@ -18,8 +18,21 @@ export function useContract() {
   const [wcProvider, setWcProvider] = useState<WalletConnectProvider | null>(null);
 
   useEffect(() => {
-    if (typeof window.ethereum !== 'undefined') {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const detectProvider = async () => {
+      let detectedProvider;
+      
+      // Attendre que le provider soit injecté
+      if (typeof window.ethereum !== 'undefined') {
+        detectedProvider = window.ethereum;
+      } else if (typeof window['web3'] !== 'undefined') {
+        // Fallback pour d'anciennes versions
+        detectedProvider = window['web3'].currentProvider;
+      } else {
+        console.log('No Ethereum provider detected');
+        return;
+      }
+
+      const provider = new ethers.providers.Web3Provider(detectedProvider);
       setProvider(provider);
       
       // Initialiser le contrat en lecture seule avec le provider
@@ -52,7 +65,8 @@ export function useContract() {
         window.ethereum.removeListener('chainChanged', handleChainChanged);
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
       };
-    }
+    };
+    detectProvider();
   }, [address]);
 
   useEffect(() => {
@@ -155,21 +169,29 @@ export function useContract() {
     try {
       setIsConnecting(true);
 
-      if (isMobile && typeof window.ethereum === 'undefined') {
-        // Rediriger vers l'application MetaMask sur mobile
-        window.location.href = metamaskAppUrl;
-        return;
+      let detectedProvider;
+      if (typeof window.ethereum !== 'undefined') {
+        detectedProvider = window.ethereum;
+      } else if (typeof window['web3'] !== 'undefined') {
+        detectedProvider = window['web3'].currentProvider;
       }
 
-      if (!provider) {
+      if (!detectedProvider) {
         toast.error('Please install MetaMask to use this application');
         return;
       }
 
-      await provider.send("eth_requestAccounts", []);
-      const signer = provider.getSigner();
+      if (!provider) {
+        const newProvider = new ethers.providers.Web3Provider(detectedProvider);
+        setProvider(newProvider);
+      }
+
+      // Force MetaMask to show the connection popup
+      await (provider || new ethers.providers.Web3Provider(detectedProvider)).send("eth_requestAccounts", []);
+      
+      const signer = (provider || new ethers.providers.Web3Provider(detectedProvider)).getSigner();
       const address = await signer.getAddress();
-      const network = await provider.getNetwork();
+      const network = await (provider || new ethers.providers.Web3Provider(detectedProvider)).getNetwork();
       
       if (network.chainId !== 56) { // BSC Mainnet
         try {
