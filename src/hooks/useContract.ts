@@ -176,22 +176,96 @@ export function useContract() {
       const isMetaMaskBrowser = window.ethereum?.isMetaMask;
 
       if (isMobile) {
-        // Sur mobile, on essaie d'abord d'ouvrir directement MetaMask avec le deep link
-        window.location.href = metamaskAppUrl;
-        
-        // Si après un court délai nous sommes toujours sur la même page,
-        // cela signifie que MetaMask n'est pas installé
-        setTimeout(() => {
-          if (document.hidden || document.visibilityState === 'hidden') {
-            // L'app MetaMask s'est ouverte
-            return;
+        if (isMetaMaskBrowser) {
+          // Si on est déjà dans l'app MetaMask, on se connecte directement
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          
+          try {
+            await window.ethereum.request({
+              method: 'eth_requestAccounts'
+            });
+            
+            const signer = provider.getSigner();
+            const address = await signer.getAddress();
+            const network = await provider.getNetwork();
+            
+            if (network.chainId !== 56) {
+              try {
+                await window.ethereum.request({
+                  method: 'wallet_switchEthereumChain',
+                  params: [{ chainId: '0x38' }]
+                });
+              } catch (switchError: any) {
+                if (switchError.code === 4902) {
+                  try {
+                    await window.ethereum.request({
+                      method: 'wallet_addEthereumChain',
+                      params: [{
+                        chainId: '0x38',
+                        chainName: 'Binance Smart Chain',
+                        nativeCurrency: {
+                          name: 'BNB',
+                          symbol: 'BNB',
+                          decimals: 18
+                        },
+                        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                        blockExplorerUrls: ['https://bscscan.com/']
+                      }]
+                    });
+                  } catch (addError) {
+                    console.error('Error adding BSC network:', addError);
+                    toast.error('Failed to add BSC network to MetaMask');
+                    return;
+                  }
+                } else {
+                  console.error('Error switching network:', switchError);
+                  toast.error('Failed to switch to BSC network');
+                  return;
+                }
+              }
+            }
+
+            // Vérifier que le contrat existe
+            const code = await provider.getCode(CONTRACT_ADDRESS);
+            if (code === '0x') {
+              console.error('No contract found at address:', CONTRACT_ADDRESS);
+              toast.error('Contract not found at specified address');
+              return;
+            }
+
+            // Initialiser le contrat avec le signer
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            
+            setSigner(signer);
+            setAddress(address);
+            setConnected(true);
+            setContract(contract);
+            
+          } catch (error: any) {
+            console.error('Failed to connect wallet:', error);
+            if (error.code === 4001) {
+              toast.error('Please accept the connection request in MetaMask');
+            } else {
+              toast.error('Failed to connect wallet');
+            }
           }
-          // MetaMask n'est pas installé, redirection vers le store
-          window.location.href = /Android/i.test(navigator.userAgent) 
-            ? metamaskPlayStoreUrl 
-            : metamaskAppStoreUrl;
-        }, 1000);
-        
+        } else {
+          // Si on n'est pas dans l'app MetaMask, on essaie d'ouvrir l'app
+          window.location.href = metamaskAppUrl;
+          
+          // Si après un court délai nous sommes toujours sur la même page,
+          // cela signifie que MetaMask n'est pas installé
+          setTimeout(() => {
+            if (document.hidden || document.visibilityState === 'hidden') {
+              // L'app MetaMask s'est ouverte
+              return;
+            }
+            // MetaMask n'est pas installé, redirection vers le store
+            window.location.href = /Android/i.test(navigator.userAgent) 
+              ? metamaskPlayStoreUrl 
+              : metamaskAppStoreUrl;
+          }, 1000);
+        }
       } else {
         // Sur navigateur desktop
         if (!window.ethereum) {
